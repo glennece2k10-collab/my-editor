@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodeBin — Live Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg2: #f5f5f3;
+      --bg3: #eeede8;
+      --border: rgba(0,0,0,0.12);
+      --border2: rgba(0,0,0,0.2);
+      --text: #1a1a18;
+      --text2: #5f5e5a;
+      --text3: #888780;
+      --accent: #185FA5;
+      --accent-light: #E6F1FB;
+      --mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --sans: system-ui, -apple-system, sans-serif;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1e1e1c;
+        --bg2: #27271f;
+        --bg3: #111110;
+        --border: rgba(255,255,255,0.1);
+        --border2: rgba(255,255,255,0.2);
+        --text: #e8e6df;
+        --text2: #a8a79f;
+        --text3: #666560;
+        --accent: #378ADD;
+        --accent-light: #042C53;
+      }
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--sans);
+      background: var(--bg3);
+      color: var(--text);
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: var(--bg3);
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      height: 46px;
+      background: var(--bg);
+      border-bottom: 0.5px solid var(--border2);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: -0.4px;
+      padding-right: 12px;
+      border-right: 0.5px solid var(--border);
+      margin-right: 4px;
+    }
+
+    .tab-bar { display: flex; gap: 3px; }
+
+    .tab {
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      color: var(--text2);
+      border: 0.5px solid transparent;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tab:hover { background: var(--bg2); color: var(--text); }
+    .tab.active { background: var(--accent-light); color: var(--accent); border-color: var(--border); font-weight: 500; }
+
+    .topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+    .run-btn {
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .run-btn:hover { opacity: 0.85; }
+    .run-btn:active { transform: scale(0.97); }
+    .run-icon {
+      width: 0; height: 0;
+      border-style: solid;
+      border-width: 4.5px 0 4.5px 8px;
+      border-color: transparent transparent transparent #fff;
+      display: inline-block;
+    }
+
+    .auto-label {
+      font-size: 11px;
+      color: var(--text3);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .auto-label input { cursor: pointer; accent-color: var(--accent); }
+
+    /* ── Workspace ── */
+    .workspace {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .panes {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      border-right: 0.5px solid var(--border);
+    }
+    .pane:last-child { border-right: none; }
+    .pane.hidden { display: none; }
+
+    .pane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.9px;
+      color: var(--text3);
+      padding: 6px 12px;
+      background: var(--bg2);
+      border-bottom: 0.5px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .editor {
+      flex: 1;
+      width: 100%;
+      background: var(--bg);
+      border: none;
+      outline: none;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+      padding: 12px 14px;
+      resize: none;
+      tab-size: 2;
+    }
+
+    /* ── Preview ── */
+    .preview-pane {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.9px;
+      color: var(--text3);
+      padding: 6px 12px;
+      background: var(--bg2);
+      border-bottom: 0.5px solid var(--border);
+      flex-shrink: 0;
+    }
+    .preview-dot { width: 7px; height: 7px; border-radius: 50%; background: #1D9E75; }
+
+    .preview-actions { margin-left: auto; display: flex; gap: 6px; }
+    .icon-btn {
+      font-size: 11px;
+      color: var(--text3);
+      cursor: pointer;
+      padding: 2px 7px;
+      border-radius: 5px;
+      border: 0.5px solid transparent;
+      background: none;
+    }
+    .icon-btn:hover { border-color: var(--border); color: var(--text2); background: var(--bg); }
+
+    .preview-frame {
+      flex: 1;
+      border: none;
+      background: #fff;
+      width: 100%;
+    }
+
+    /* ── Console ── */
+    .console-pane {
+      height: 160px;
+      border-top: 0.5px solid var(--border2);
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .console-pane.hidden { display: none; }
+
+    .console-header {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.9px;
+      color: var(--text3);
+      padding: 6px 12px;
+      background: var(--bg2);
+      border-bottom: 0.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .console-clear {
+      font-size: 11px;
+      color: var(--text3);
+      cursor: pointer;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .console-clear:hover { color: var(--text2); }
+
+    .console-output {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.6;
+      padding: 8px 12px;
+      overflow-y: auto;
+      color: var(--text2);
+    }
+    .console-line { padding: 1px 0; }
+    .console-line.log { color: var(--text2); }
+    .console-line.error { color: #E24B4A; }
+    .console-line.warn { color: #BA7517; }
+    .console-line.info { color: var(--accent); }
+
+    /* ── Status bar ── */
+    .status-bar {
+      height: 24px;
+      background: var(--bg2);
+      border-top: 0.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .status-item { font-size: 10px; color: var(--text3); display: flex; align-items: center; gap: 4px; }
+    .status-ok { color: #1D9E75; }
+    .status-error { color: #E24B4A; }
+
+    .layout-btn {
+      margin-left: auto;
+      font-size: 10px;
+      color: var(--text3);
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 0.5px solid transparent;
+      background: none;
+    }
+    .layout-btn:hover { border-color: var(--border); color: var(--text2); background: var(--bg); }
+
+    /* ── Resizer ── */
+    .resizer {
+      width: 4px;
+      background: transparent;
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+      z-index: 5;
+    }
+    .resizer:hover, .resizer.dragging { background: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="logo">CodeBin</div>
+    <div class="tab-bar">
+      <div class="tab active" data-pane="html">HTML</div>
+      <div class="tab active" data-pane="css">CSS</div>
+      <div class="tab active" data-pane="js">JS</div>
+      <div class="tab" id="toggle-console-tab">Console</div>
+    </div>
+    <div class="topbar-right">
+      <label class="auto-label">
+        <input type="checkbox" id="auto-run" /> Auto-run
+      </label>
+      <button class="run-btn" id="run-btn">
+        <span class="run-icon"></span> Run
+      </button>
+    </div>
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace" id="workspace">
+    <div class="panes" id="panes">
+
+      <!-- HTML Pane -->
+      <div class="pane" id="pane-html">
+        <div class="pane-header">HTML</div>
+        <textarea class="editor" id="editor-html" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+      </div>
+      <div class="resizer" id="resizer-html-css"></div>
+
+      <!-- CSS Pane -->
+      <div class="pane" id="pane-css">
+        <div class="pane-header">CSS</div>
+        <textarea class="editor" id="editor-css" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+      <div class="resizer" id="resizer-css-js"></div>
+
+      <!-- JS Pane -->
+      <div class="pane" id="pane-js">
+        <div class="pane-header">JS</div>
+        <textarea class="editor" id="editor-js" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+      <div class="resizer" id="resizer-js-preview"></div>
+
+      <!-- Preview Pane -->
+      <div class="preview-pane" id="pane-preview">
+        <div class="preview-header">
+          <span class="preview-dot"></span> Output
+          <div class="preview-actions">
+            <button class="icon-btn" id="reload-btn" title="Reload">↺ Reload</button>
+            <button class="icon-btn" id="open-btn" title="Open in new tab">⇱ New tab</button>
+          </div>
+        </div>
+        <iframe class="preview-frame" id="preview" sandbox="allow-scripts allow-same-origin allow-modals allow-popups"></iframe>
+      </div>
+
+    </div>
+
+    <!-- Console -->
+    <div class="console-pane hidden" id="console-pane">
+      <div class="console-header">
+        Console
+        <span class="console-clear" id="clear-console">clear</span>
+      </div>
+      <div class="console-output" id="console-output">
+        <div class="console-line info">› Console ready. Run your code to see output.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="status-item status-ok" id="status-text">Ready</span>
+    <span class="status-item" id="char-count">0 chars</span>
+    <button class="layout-btn" id="layout-toggle">⇄ Layout</button>
+  </div>
+
+</div>
+
+<script>
+  const htmlEl = document.getElementById('editor-html');
+  const cssEl  = document.getElementById('editor-css');
+  const jsEl   = document.getElementById('editor-js');
+  const preview = document.getElementById('preview');
+  const runBtn  = document.getElementById('run-btn');
+  const autoRunEl = document.getElementById('auto-run');
+  const statusText = document.getElementById('status-text');
+  const charCountEl = document.getElementById('char-count');
+  const consolePaneEl = document.getElementById('console-pane');
+  const consoleOutputEl = document.getElementById('console-output');
+  const toggleConsoleTab = document.getElementById('toggle-console-tab');
+  const clearConsoleBtn = document.getElementById('clear-console');
+  const layoutToggle = document.getElementById('layout-toggle');
+  const panesEl = document.getElementById('panes');
+  const workspaceEl = document.getElementById('workspace');
+  const reloadBtn = document.getElementById('reload-btn');
+  const openBtn = document.getElementById('open-btn');
+
+  // ── Default starter code ──
+  htmlEl.value = `<div class="card">
+  <h1>Hello, CodeBin!</h1>
+  <p>Edit the HTML, CSS, and JS panes, then click <strong>Run</strong>.</p>
+  <button onclick="greet()">Say Hello</button>
+</div>`;
+
+  cssEl.value = `body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f0f4f8;
+}
+.card {
+  background: white;
+  border-radius: 14px;
+  padding: 2.5rem 3rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.09);
+  text-align: center;
+  max-width: 380px;
+}
+h1 {
+  color: #185FA5;
+  margin-bottom: 0.75rem;
+  font-size: 1.75rem;
+}
+p {
+  color: #555;
+  line-height: 1.65;
+  margin-bottom: 1.5rem;
+}
+button {
+  background: #185FA5;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+button:hover { background: #0c447c; }`;
+
+  jsEl.value = `function greet() {
+  const names = ['World', 'Developer', 'Coder', 'Friend'];
+  const pick = names[Math.floor(Math.random() * names.length)];
+  alert('Hello, ' + pick + '!');
+  console.log('Greeted:', pick);
+}`;
+
+  // ── State ──
+  let consoleVisible = false;
+  let layoutMode = 'horizontal';
+  let lastSrcdoc = '';
+  let autoRunTimer = null;
+  let pendingConsoleAlert = false;
+
+  // ── Run code ──
+  function buildDoc() {
+    const html = htmlEl.value;
+    const css  = cssEl.value;
+    const js   = jsEl.value;
+    const interceptJs = `
+(function() {
+  var _log = console.log.bind(console);
+  var _err = console.error.bind(console);
+  var _warn = console.warn.bind(console);
+  var _info = console.info.bind(console);
+  function post(type, args) {
+    try { window.parent.postMessage({ _codebin: true, type: type, msg: Array.from(args).map(String).join(' ') }, '*'); } catch(e){}
+  }
+  console.log   = function() { post('log',  arguments); _log.apply(console, arguments);  };
+  console.error = function() { post('error',arguments); _err.apply(console, arguments);  };
+  console.warn  = function() { post('warn', arguments); _warn.apply(console, arguments); };
+  console.info  = function() { post('info', arguments); _info.apply(console, arguments); };
+  window.addEventListener('error', function(e) {
+    post('error', [e.message + ' (line ' + e.lineno + ')']);
+  });
+})();
+`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${html}<script>${interceptJs}\ntry{\n${js}\n}catch(e){console.error(e.message)}<\/script></body></html>`;
+  }
+
+  function runCode() {
+    const doc = buildDoc();
+    lastSrcdoc = doc;
+    preview.srcdoc = doc;
+    const total = htmlEl.value.length + cssEl.value.length + jsEl.value.length;
+    charCountEl.textContent = total.toLocaleString() + ' chars';
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    statusText.textContent = 'Ran at ' + now;
+    statusText.className = 'status-item status-ok';
+  }
+
+  runBtn.addEventListener('click', runCode);
+  reloadBtn.addEventListener('click', runCode);
+
+  // ── Auto-run ──
+  function scheduleAutoRun() {
+    if (!autoRunEl.checked) return;
+    clearTimeout(autoRunTimer);
+    autoRunTimer = setTimeout(runCode, 800);
+  }
+  [htmlEl, cssEl, jsEl].forEach(el => el.addEventListener('input', scheduleAutoRun));
+
+  // ── Open in new tab ──
+  openBtn.addEventListener('click', () => {
+    const doc = buildDoc();
+    const blob = new Blob([doc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
+
+  // ── Tab key support ──
+  [htmlEl, cssEl, jsEl].forEach(el => {
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = el.selectionStart, end = el.selectionEnd;
+        el.value = el.value.substring(0, s) + '  ' + el.value.substring(end);
+        el.selectionStart = el.selectionEnd = s + 2;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runCode();
+      }
+    });
+  });
+
+  // ── Console messages from iframe ──
+  window.addEventListener('message', e => {
+    if (!e.data || !e.data._codebin) return;
+    addConsoleMessage(e.data.type, e.data.msg);
+    if (!consoleVisible && !pendingConsoleAlert) {
+      pendingConsoleAlert = true;
+      toggleConsoleTab.style.fontWeight = '600';
+      toggleConsoleTab.style.color = e.data.type === 'error' ? '#E24B4A' : 'var(--accent)';
+    }
+  });
+
+  function addConsoleMessage(type, text) {
+    const line = document.createElement('div');
+    line.className = 'console-line ' + type;
+    const prefix = { log: '›', error: '✕', warn: '⚠', info: 'ℹ' }[type] || '›';
+    line.textContent = prefix + ' ' + text;
+    consoleOutputEl.appendChild(line);
+    consoleOutputEl.scrollTop = consoleOutputEl.scrollHeight;
+  }
+
+  // ── Console toggle ──
+  toggleConsoleTab.addEventListener('click', () => {
+    consoleVisible = !consoleVisible;
+    consolePaneEl.classList.toggle('hidden', !consoleVisible);
+    toggleConsoleTab.classList.toggle('active', consoleVisible);
+    if (consoleVisible) {
+      pendingConsoleAlert = false;
+      toggleConsoleTab.style.fontWeight = '';
+      toggleConsoleTab.style.color = '';
+    }
+  });
+
+  clearConsoleBtn.addEventListener('click', () => {
+    consoleOutputEl.innerHTML = '';
+  });
+
+  // ── Pane visibility toggle ──
+  document.querySelectorAll('.tab[data-pane]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const paneId = 'pane-' + tab.dataset.pane;
+      const paneEl = document.getElementById(paneId);
+      if (!paneEl) return;
+      const isHidden = paneEl.classList.contains('hidden');
+      paneEl.classList.toggle('hidden', !isHidden);
+      tab.classList.toggle('active', isHidden);
+    });
+  });
+
+  // ── Layout toggle ──
+  layoutToggle.addEventListener('click', () => {
+    layoutMode = layoutMode === 'horizontal' ? 'vertical' : 'horizontal';
+    if (layoutMode === 'vertical') {
+      panesEl.style.flexDirection = 'column';
+      layoutToggle.textContent = '⇅ Layout';
+    } else {
+      panesEl.style.flexDirection = 'row';
+      layoutToggle.textContent = '⇄ Layout';
+    }
+  });
+
+  // ── Drag-to-resize panes ──
+  function makeResizer(resizerId, paneAId, paneBId) {
+    const resizerEl = document.getElementById(resizerId);
+    const paneA = document.getElementById(paneAId);
+    const paneB = document.getElementById(paneBId);
+    if (!resizerEl || !paneA || !paneB) return;
+    let startX, startWidthA, startWidthB;
+
+    resizerEl.addEventListener('mousedown', e => {
+      startX = e.clientX;
+      startWidthA = paneA.getBoundingClientRect().width;
+      startWidthB = paneB.getBoundingClientRect().width;
+      resizerEl.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const onMouseMove = ev => {
+        const dx = ev.clientX - startX;
+        const newA = Math.max(80, startWidthA + dx);
+        const newB = Math.max(80, startWidthB - dx);
+        paneA.style.flex = 'none';
+        paneA.style.width = newA + 'px';
+        paneB.style.flex = 'none';
+        paneB.style.width = newB + 'px';
+      };
+
+      const onMouseUp = () => {
+        resizerEl.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      e.preventDefault();
+    });
+  }
+
+  makeResizer('resizer-html-css',  'pane-html', 'pane-css');
+  makeResizer('resizer-css-js',    'pane-css',  'pane-js');
+  makeResizer('resizer-js-preview','pane-js',   'pane-preview');
+
+  // ── Initial run ──
+  runCode();
+</script>
+</body>
+</html>
